@@ -9,7 +9,7 @@ import { VehicleModelErrorBoundary } from '@/components/vehicle/Vehicle';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTagStore } from '@/store/tagStore';
 import { useMultiplayerStore } from '@/store/multiplayerStore';
-import { isMobileDevice } from '@/utils/device';
+import { isMobileDevice, isIOS } from '@/utils/device';
 import {
   registerRemoteVehicleMesh,
   unregisterRemoteVehicleMesh,
@@ -319,6 +319,11 @@ export function RemoteVehicle({ player }: RemoteVehicleProps) {
  */
 function scheduleDeferredVehiclePreload(): void {
   if (typeof window === 'undefined') return;
+
+  // On iOS WebKit (Safari/Chrome on iPhone/iPad), bulk preloading all 7 vehicle GLBs in the background
+  // exceeds WebKit's strict ~300MB Jetsam process memory ceiling and triggers an automatic crash/reload loop.
+  // On iOS, remote vehicle models are loaded on-demand when a remote peer actually enters the session.
+  if (isIOS()) return;
 
   const preloadAll = () => {
     for (const preset of Object.values(VEHICLE_REGISTRY)) {

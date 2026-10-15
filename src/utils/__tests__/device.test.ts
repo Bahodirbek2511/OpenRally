@@ -547,5 +547,12 @@ describe('Device Detection & DPR Scaling', () => {
       expect(result.targetDpr).toBeLessThanOrEqual(IOS_MAX_DPR);
       expect(result.targetDpr).toBe(1.5);
     });
+
+    it('clamps anisotropy strictly to 1 on iOS to save TBDR texture memory bandwidth', () => {
+      expect(getClampedAnisotropy(16, true, true)).toBe(1);
+      expect(getClampedAnisotropy(8, true, true)).toBe(1);
+      expect(getClampedAnisotropy(16, true, false)).toBe(2);
+      expect(getClampedAnisotropy(16, false, false)).toBe(16);
+    });
   });
 });

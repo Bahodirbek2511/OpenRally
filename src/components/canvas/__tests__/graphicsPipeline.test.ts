@@ -3,6 +3,7 @@ import {
   shouldEnableCanvasShadows,
   getCanvasShadowsType,
   shouldRenderEnvironment,
+  shouldRenderPostProcessing,
   getToneMappingExposure,
 } from '../GameCanvas';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -166,6 +167,35 @@ describe('Graphics Pipeline & Settings Scaling', () => {
     it('permits environment cubemap reflections on mobile only for high and very_high presets', () => {
       expect(shouldRenderEnvironment(true, 'high')).toBe(true);
       expect(shouldRenderEnvironment(true, 'very_high')).toBe(true);
+    });
+
+    it('strictly suppresses environment cubemap reflections on iOS WebKit to prevent CubeCamera OOM', () => {
+      expect(shouldRenderEnvironment(true, 'very_high', true)).toBe(false);
+      expect(shouldRenderEnvironment(true, 'high', true)).toBe(false);
+      expect(shouldRenderEnvironment(false, 'very_high', true)).toBe(false);
+    });
+  });
+
+  describe('shouldRenderPostProcessing', () => {
+    it('evaluates desktop post-processing correctly based on quality preset', () => {
+      expect(shouldRenderPostProcessing(true, false, 'very_high', false)).toBe(true);
+      expect(shouldRenderPostProcessing(true, false, 'high', false)).toBe(true);
+      expect(shouldRenderPostProcessing(true, false, 'medium', false)).toBe(true);
+      expect(shouldRenderPostProcessing(true, false, 'low', false)).toBe(false);
+      expect(shouldRenderPostProcessing(false, false, 'very_high', false)).toBe(false);
+    });
+
+    it('evaluates Android/mobile post-processing correctly (bypassing on low and medium)', () => {
+      expect(shouldRenderPostProcessing(true, true, 'very_high', false)).toBe(true);
+      expect(shouldRenderPostProcessing(true, true, 'high', false)).toBe(true);
+      expect(shouldRenderPostProcessing(true, true, 'medium', false)).toBe(false);
+      expect(shouldRenderPostProcessing(true, true, 'low', false)).toBe(false);
+    });
+
+    it('strictly suppresses post-processing on iOS WebKit across all presets to prevent Jetsam OOM crashes', () => {
+      expect(shouldRenderPostProcessing(true, true, 'very_high', true)).toBe(false);
+      expect(shouldRenderPostProcessing(true, true, 'high', true)).toBe(false);
+      expect(shouldRenderPostProcessing(true, false, 'very_high', true)).toBe(false);
     });
   });
 

@@ -20,7 +20,7 @@ import { useTerrainData } from '@/components/terrain/TerrainContext';
 import { useGameStore } from '@/store/gameStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { mapRange } from '@/utils/math';
-import { isMobileDevice, getClampedAnisotropy } from '@/utils/device';
+import { isMobileDevice, getClampedAnisotropy, isIOS } from '@/utils/device';
 import { getInterpolatedHeight } from '@/utils/terrainCompiler';
 import {
   GRASS_HEIGHT_MIN,
@@ -184,11 +184,18 @@ function GrassChunkMesh({ index, geometry, material, chunk, onMeshRegister }: Gr
 export function GrassField() {
   const storeQuality = useSettingsStore((s) => s.graphicsQuality);
   const graphicsQuality = useSettingsStore.getState().graphicsQuality ?? storeQuality;
+  const gameState = useGameStore((s) => s.gameState);
 
   // In Low graphics mode on mobile (or generally when graphicsQuality === 'low'),
   // completely disable grass rendering to eliminate all grass clusters, 36 draw calls,
   // and fill-rate-destroying fragment alpha discard penalty
   if (graphicsQuality === 'low') {
+    return null;
+  }
+
+  // On iOS WebKit, stagger grass field mounting until after title screen
+  // to prevent concurrent shader compilation freeze and Metal watchdog timeout on frame 0
+  if (isIOS() && gameState === 'title') {
     return null;
   }
 
@@ -419,7 +426,9 @@ function GrassFieldContent() {
 
       shaderUniformsRef.current.push(shader.uniforms);
 
-      shader.vertexShader = `
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>
         uniform float u_time;
         uniform float u_windSpeed;
         uniform float u_windStrength;
@@ -429,11 +438,6 @@ function GrassFieldContent() {
         uniform float u_fadeRange;
         
         attribute float bladeTip;
-      ` + shader.vertexShader;
-
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <common>',
-        `#include <common>
         varying float vBladeTip;
         varying vec2 vMyUv;
         varying vec3 vWorldGrassPos;
@@ -489,7 +493,9 @@ function GrassFieldContent() {
         `,
       );
 
-      shader.fragmentShader = `
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        `#include <common>
         varying float vBladeTip;
         varying vec2 vMyUv;
         varying vec3 vWorldGrassPos;
@@ -497,7 +503,8 @@ function GrassFieldContent() {
         uniform sampler2D u_flowerTex;
         uniform float u_isDesert;
         uniform float u_isMobile;
-      ` + shader.fragmentShader;
+        `,
+      );
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',

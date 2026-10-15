@@ -32,7 +32,7 @@ import { useSettingsStore, saveSettingsToStorage } from '@/store/settingsStore';
 import { useGameStore } from '@/store/gameStore';
 import { getLevelPreset } from '@/config/levelRegistry';
 import { SKY_CONFIG, FOG_CONFIG, POSTPROCESSING_CONFIG } from '@/config/environment';
-import { calculateDprConfig, isMobileDevice, isMobileOrAndroid } from '@/utils/device';
+import { calculateDprConfig, isMobileDevice, isMobileOrAndroid, isIOS } from '@/utils/device';
 import { suspendSharedAudioContext } from '@/utils/audio/audioContext';
 import { MAX_DELTA } from '@/config/vehicle';
 import type { DrawDistance } from '@/types';
@@ -275,7 +275,11 @@ export function shouldRenderPostProcessing(
   postProcessingEnabled: boolean,
   isMobile: boolean,
   graphicsQuality: string,
+  isIos: boolean = isIOS(),
 ): boolean {
+  // On iOS WebKit, @react-three/postprocessing multi-pass framebuffers trigger WebKit Jetsam OOM kills
+  if (isIos) return false;
+
   return (
     postProcessingEnabled &&
     (isMobile ? graphicsQuality === 'very_high' || graphicsQuality === 'high' : graphicsQuality !== 'low')
@@ -290,11 +294,14 @@ export function shouldRenderPostProcessing(
  *
  * It is bypassed on mobile for 'low' and 'medium' quality profiles (falling back to ambient/directional light),
  * and only active on 'high' / 'very_high' or desktop platforms.
+ * On iOS WebKit, it is strictly bypassed across all presets in favor of the lightweight MobileEnvironmentProbe.
  */
 export function shouldRenderEnvironment(
   isMobile: boolean,
   graphicsQuality: string,
+  isIos: boolean = isIOS(),
 ): boolean {
+  if (isIos) return false;
   return !isMobile || graphicsQuality === 'high' || graphicsQuality === 'very_high';
 }
 
@@ -374,11 +381,13 @@ export function GameCanvas() {
     postProcessingEnabled,
     isMobile,
     graphicsQuality,
+    isIOS(),
   );
 
   const canRenderEnvironment = shouldRenderEnvironment(
     isMobile,
     graphicsQuality,
+    isIOS(),
   );
 
   const envResolution = isMobile ? 64 : 256;

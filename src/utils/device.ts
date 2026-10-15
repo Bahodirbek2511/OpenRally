@@ -265,9 +265,13 @@ export function calculateTargetDpr(
  */
 export function getClampedAnisotropy(
   baseAnisotropy: number,
-  isMobile: boolean = isMobileDevice()
+  isMobile: boolean = isMobileDevice(),
+  isIos: boolean = isIOS(),
 ): number {
   if (!Number.isFinite(baseAnisotropy) || baseAnisotropy < 1) {
+    return 1;
+  }
+  if (isIos) {
     return 1;
   }
   return isMobile ? Math.min(baseAnisotropy, 2) : baseAnisotropy;

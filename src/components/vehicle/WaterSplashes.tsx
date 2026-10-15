@@ -305,22 +305,28 @@ export function WaterSplashes({ wheelsRef, chassisRef }: WaterSplashesProps) {
         depthWrite={false}
         opacity={0.8}
         onBeforeCompile={(shader) => {
-          shader.vertexShader = `
-            attribute float instanceOpacity;
-            varying float vInstanceOpacity;
-            ${shader.vertexShader}
-          `.replace(
-            `#include <begin_vertex>`,
-            `#include <begin_vertex>
-             vInstanceOpacity = instanceOpacity;`
-          );
-          shader.fragmentShader = `
-            varying float vInstanceOpacity;
-            ${shader.fragmentShader}
-          `.replace(
-            `vec4 diffuseColor = vec4( diffuse, opacity );`,
-            `vec4 diffuseColor = vec4( diffuse, opacity * vInstanceOpacity );`
-          );
+          shader.vertexShader = shader.vertexShader
+            .replace(
+              '#include <common>',
+              `#include <common>
+              attribute float instanceOpacity;
+              varying float vInstanceOpacity;`
+            )
+            .replace(
+              '#include <begin_vertex>',
+              `#include <begin_vertex>
+               vInstanceOpacity = instanceOpacity;`
+            );
+          shader.fragmentShader = shader.fragmentShader
+            .replace(
+              '#include <common>',
+              `#include <common>
+              varying float vInstanceOpacity;`
+            )
+            .replace(
+              'vec4 diffuseColor = vec4( diffuse, opacity );',
+              'vec4 diffuseColor = vec4( diffuse, opacity * vInstanceOpacity );'
+            );
         }}
       />
     </instancedMesh>
