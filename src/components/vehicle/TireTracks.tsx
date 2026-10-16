@@ -39,7 +39,7 @@ export function TireTracks({ wheelsRef, chassisRef }: TireTracksProps) {
       },
       vertexShader: /* glsl */ `
         attribute float ribbonAlpha;
-        attribute vec3 color;
+        attribute vec3 ribbonColor;
         
         varying vec2 vUv;
         varying float vAlpha;
@@ -48,7 +48,7 @@ export function TireTracks({ wheelsRef, chassisRef }: TireTracksProps) {
         void main() {
           vUv = uv;
           vAlpha = ribbonAlpha;
-          vColor = color;
+          vColor = ribbonColor;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -59,25 +59,29 @@ export function TireTracks({ wheelsRef, chassisRef }: TireTracksProps) {
         varying vec3 vColor;
         
         void main() {
+          if (vAlpha <= 0.005) discard;
+          
           // Soft edge feathering across tire width to prevent hard polygonal edges
-          float edgeFeather = smoothstep(0.0, 0.06, vUv.x) * smoothstep(1.0, 0.94, vUv.x);
+          float edgeFeather = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
           
           vec4 texSample = texture2D(uTexture, vUv);
           
-          // Luminance-based tread mask (dark tire rubber -> high alpha, white background -> 0 alpha)
+          // Luminance-based tread mask (dark tire rubber -> high alpha, light background -> 0 alpha)
           float luminance = dot(texSample.rgb, vec3(0.299, 0.587, 0.114));
           float treadAlpha = clamp((0.85 - luminance) / 0.65, 0.0, 1.0);
           
           // Include texture alpha if present
-          if (texSample.a > 0.05 && texSample.a < 0.95) {
+          if (texSample.a > 0.02) {
             treadAlpha = max(treadAlpha, texSample.a);
           }
           
           // Subtle base contact strip across entire width
-          float baseStrip = smoothstep(0.04, 0.15, vUv.x) * smoothstep(0.96, 0.85, vUv.x) * 0.35;
+          float baseStrip = smoothstep(0.04, 0.18, vUv.x) * smoothstep(0.96, 0.82, vUv.x) * 0.35;
           float patternAlpha = clamp(treadAlpha + baseStrip, 0.0, 1.0);
           
           float finalAlpha = patternAlpha * vAlpha * edgeFeather;
+          if (finalAlpha <= 0.005) discard;
+          
           gl_FragColor = vec4(vColor, finalAlpha);
         }
       `,

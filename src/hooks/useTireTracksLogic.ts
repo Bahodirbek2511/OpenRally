@@ -8,7 +8,9 @@ import { useSettingsStore } from '@/store/settingsStore';
 import {
   TireRibbonBuffer,
   sampleTerrainHeightAndNormal,
+  SURFACE_TRACK_PROFILES,
 } from '@/utils/physics/tireRibbon';
+import { getSurfaceAtPosition } from '@/utils/physics/tires';
 import {
   TIRE_TRACK_QUALITY_PRESETS,
   TIRE_TRACK_MOBILE_PRESETS,
@@ -117,6 +119,7 @@ export function useTireTracksLogic(
       geo.setAttribute('position', new BufferAttribute(buf.positions, 3));
       geo.setAttribute('uv', new BufferAttribute(buf.uvs, 2));
       geo.setAttribute('color', new BufferAttribute(buf.colors, 3));
+      geo.setAttribute('ribbonColor', new BufferAttribute(buf.colors, 3));
       geo.setAttribute('ribbonAlpha', new BufferAttribute(buf.alphas, 1));
       geo.setIndex(new BufferAttribute(buf.indices, 1));
       geo.setDrawRange(0, 0);
@@ -143,8 +146,6 @@ export function useTireTracksLogic(
     if (gameState.gameState !== 'playing') return;
 
     const currentTime = state.clock.elapsedTime;
-    const surfaceType = gameState.surface;
-
     const linvel = chassis.linvel();
     const speedMps = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
 
@@ -160,12 +161,11 @@ export function useTireTracksLogic(
       if (!hasAnySegments) return;
     }
 
-    // Calculate slip intensity from lateral speed and slip angle
+    // Kinematic slide telemetry
     const lateralSpeed = Math.abs(gameState.lateralSpeed);
     const slipAngle = Math.abs(gameState.slipAngle);
-    const slipRatio = lateralSpeed + slipAngle * 3.0;
-
     const isAirborne = gameState.isAirborne;
+    const tireGrips = gameState.tireGrips;
 
     for (let i = 0; i < 4; i++) {
       const wheel = wheels[i];
@@ -205,17 +205,41 @@ export function useTireTracksLogic(
         if (heightAboveGround > 0.25 || heightAboveGround < -0.6) {
           buf.notifyAirborne();
         } else {
-          buf.addContactPoint(
-            _contactPos,
-            _contactNormal,
-            surfaceType,
-            speedMps,
-            slipRatio,
-            true,
-            currentTime,
+          // Sample the exact physical surface under this specific wheel contact location
+          const wheelSurface = getSurfaceAtPosition(
+            _wheelPos.x,
+            _wheelPos.y,
+            _wheelPos.z,
             heightmapData,
             levelData,
           );
+
+          // Calculate authentic per-wheel physical slip:
+          // 1. Lateral drift / yaw scrub across the chassis
+          const lateralSlide = lateralSpeed * 0.45 + slipAngle * 1.8;
+          // 2. Individual wheel grip loss (ABS brake pulsing, handbrake lockup, or power-on burnout)
+          const wheelGrip = tireGrips?.[i] ?? 1.0;
+          const gripLoss = Math.max(0, (1.0 - wheelGrip) * 2.2);
+          const wheelSlip = lateralSlide + gripLoss;
+
+          const profile = SURFACE_TRACK_PROFILES[wheelSurface] ?? SURFACE_TRACK_PROFILES.grass;
+
+          // On non-deformable hard surfaces (tarmac), dry asphalt does not deposit rubber marks unless there is slip
+          if (!profile.isDeformable && wheelSlip < profile.slipThreshold) {
+            buf.notifyAirborne();
+          } else {
+            buf.addContactPoint(
+              _contactPos,
+              _contactNormal,
+              wheelSurface,
+              speedMps,
+              wheelSlip,
+              true,
+              currentTime,
+              heightmapData,
+              levelData,
+            );
+          }
         }
       }
 
@@ -225,6 +249,7 @@ export function useTireTracksLogic(
         const posAttr = geo.attributes.position;
         const uvAttr = geo.attributes.uv;
         const colAttr = geo.attributes.color;
+        const ribbonColAttr = geo.attributes.ribbonColor;
         const alphaAttr = geo.attributes.ribbonAlpha;
         const idxAttr = geo.index;
 
@@ -233,6 +258,7 @@ export function useTireTracksLogic(
           if (posAttr) posAttr.needsUpdate = true;
           if (uvAttr) uvAttr.needsUpdate = true;
           if (colAttr) colAttr.needsUpdate = true;
+          if (ribbonColAttr) ribbonColAttr.needsUpdate = true;
           if (idxAttr) idxAttr.needsUpdate = true;
           buf.topologyDirty = false;
         }

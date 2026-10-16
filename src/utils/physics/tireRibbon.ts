@@ -35,58 +35,80 @@ export const DEFAULT_RIBBON_CONFIG: TireRibbonConfig = {
 };
 
 /**
- * Surface profile specifying mark color, opacity, and slip requirements.
+ * Surface profile specifying mark color, slide color, opacity, and slip requirements.
  */
 export interface SurfaceTrackProfile {
   /** Minimum lateral/longitudinal slip required to emit skid marks */
   slipThreshold: number;
-  /** Base track color hex */
+  /** Base track color hex (compacted / normal rolling) */
   colorHex: string;
-  /** Base opacity under normal rolling contact */
+  /** Heavy sliding / skidding mark color hex (deeper trench / dark rubber) */
+  slideColorHex: string;
+  /** Base opacity under normal rolling contact (0 on dry tarmac) */
   baseOpacity: number;
   /** Maximum opacity under intense slip/drift */
   maxSlipOpacity: number;
+  /** Whether the surface is soft/deformable */
+  isDeformable: boolean;
 }
 
 /**
- * Per-surface track profiles.
+ * Authentic per-surface track profiles based on real-world tire physics:
+ * - Tarmac: Zero rubber deposition under normal rolling; dark graphite rubber only under high slip/lockup.
+ * - Snow: Cool icy blue-grey ruts; never black rubber.
+ * - Sand: Warm compacted dune ruts, deepening into darker moist sub-sand under slip.
+ * - Gravel: Compacted stone dust trails, scraping to darker sub-base rock under slide.
+ * - Mud: Deep plastic loam impressions, slick churned ruts during wheelspin.
+ * - Grass: Faint green blade sheen rolling; tore-up turf exposing dark loam earth under drift.
  */
 export const SURFACE_TRACK_PROFILES: Record<SurfaceType, SurfaceTrackProfile> = {
   tarmac: {
-    slipThreshold: 0.6,
-    colorHex: '#141414',
-    baseOpacity: 0.35,
-    maxSlipOpacity: 0.95,
+    slipThreshold: 0.28,
+    colorHex: '#18191b',
+    slideColorHex: '#121214',
+    baseOpacity: 0.0,
+    maxSlipOpacity: 0.85,
+    isDeformable: false,
   },
   mud: {
     slipThreshold: 0.0,
-    colorHex: '#2b1a0e',
-    baseOpacity: 0.85,
-    maxSlipOpacity: 0.95,
+    colorHex: '#362316',
+    slideColorHex: '#20140a',
+    baseOpacity: 0.55,
+    maxSlipOpacity: 0.88,
+    isDeformable: true,
   },
   sand: {
     slipThreshold: 0.0,
-    colorHex: '#7a5a32',
-    baseOpacity: 0.8,
-    maxSlipOpacity: 0.92,
+    colorHex: '#886844',
+    slideColorHex: '#644828',
+    baseOpacity: 0.26,
+    maxSlipOpacity: 0.72,
+    isDeformable: true,
   },
   grass: {
-    slipThreshold: 0.35,
-    colorHex: '#1e3312',
-    baseOpacity: 0.2,
-    maxSlipOpacity: 0.6,
+    slipThreshold: 0.15,
+    colorHex: '#3e5826',
+    slideColorHex: '#2c1b0f',
+    baseOpacity: 0.08,
+    maxSlipOpacity: 0.68,
+    isDeformable: true,
   },
   gravel: {
     slipThreshold: 0.0,
-    colorHex: '#3a3835',
-    baseOpacity: 0.75,
-    maxSlipOpacity: 0.9,
+    colorHex: '#524d47',
+    slideColorHex: '#38342f',
+    baseOpacity: 0.22,
+    maxSlipOpacity: 0.65,
+    isDeformable: true,
   },
   snow: {
     slipThreshold: 0.0,
-    colorHex: '#99b3cc',
-    baseOpacity: 0.7,
-    maxSlipOpacity: 0.88,
+    colorHex: '#9bb3c9',
+    slideColorHex: '#7793ab',
+    baseOpacity: 0.20,
+    maxSlipOpacity: 0.55,
+    isDeformable: true,
   },
 };
 
@@ -116,6 +138,8 @@ const _scratchTangent = new Vector3();
 const _scratchRight = new Vector3();
 const _scratchNormal = new Vector3(0, 1, 0);
 const _scratchUp = new Vector3(0, 1, 0);
+const _baseColor = new Color();
+const _slideColor = new Color();
 const _tempColor = new Color();
 const _edgeLeft = new Vector3();
 const _edgeRight = new Vector3();
@@ -316,10 +340,19 @@ export class TireRibbonBuffer {
 
     const profile = SURFACE_TRACK_PROFILES[surfaceType] ?? SURFACE_TRACK_PROFILES.grass;
 
-    // Calculate dynamic opacity based on slip and surface
+    // Calculate dynamic opacity and color blending based on slip and surface mechanics
     let effectiveAlpha = profile.baseOpacity;
-    if (slipRatio > profile.slipThreshold) {
-      const slipFactor = Math.min(1.0, (slipRatio - profile.slipThreshold) / 2.0);
+    let slipFactor = 0.0;
+
+    if (profile.slipThreshold > 0) {
+      // For hard / high-threshold surfaces (tarmac, grass)
+      if (slipRatio > profile.slipThreshold) {
+        slipFactor = Math.min(1.0, (slipRatio - profile.slipThreshold) / 1.5);
+        effectiveAlpha = profile.baseOpacity + (profile.maxSlipOpacity - profile.baseOpacity) * slipFactor;
+      }
+    } else {
+      // For deformable loose surfaces (snow, sand, gravel, mud)
+      slipFactor = Math.min(1.0, slipRatio / 2.0);
       effectiveAlpha = profile.baseOpacity + (profile.maxSlipOpacity - profile.baseOpacity) * slipFactor;
     }
 
@@ -382,7 +415,9 @@ export class TireRibbonBuffer {
     this.accumulatedDistance += distance;
     const vCoord = this.accumulatedDistance / this.config.treadTileLength;
 
-    _tempColor.set(profile.colorHex);
+    _baseColor.set(profile.colorHex);
+    _slideColor.set(profile.slideColorHex);
+    _tempColor.copy(_baseColor).lerp(_slideColor, slipFactor);
 
     const isDisconnected = this.wasAirborne;
     this.pushPoint(

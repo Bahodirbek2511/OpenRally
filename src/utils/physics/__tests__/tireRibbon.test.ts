@@ -135,26 +135,45 @@ describe('Tire Ribbon System', () => {
       expect(buffer.getActiveIndicesCount()).toBe(6);
     });
 
-    it('scales slip opacity on tarmac for subtle rolling and dark skid marks', () => {
+    it('scales slip opacity on tarmac: 0 opacity during low slip, dark rubber skid marks during high slip', () => {
       const buffer = new TireRibbonBuffer({ minDistance: 0.1 });
       const normal = new Vector3(0, 1, 0);
 
       buffer.addContactPoint(new Vector3(0, 0, 0), normal, 'tarmac', 10, 0.0, true, 1.0);
 
-      // Low slip on tarmac -> subtle rolling mark emitted with baseOpacity (0.35)
-      const addedLowSlip = buffer.addContactPoint(new Vector3(0, 0, 1.0), normal, 'tarmac', 10, 0.2, true, 1.1);
+      // Low slip on tarmac (< threshold 0.28) -> emitted with baseOpacity 0.0 (invisible on dry asphalt)
+      const addedLowSlip = buffer.addContactPoint(new Vector3(0, 0, 1.0), normal, 'tarmac', 10, 0.15, true, 1.1);
       expect(addedLowSlip).toBe(true);
       expect(buffer.getSegmentCount()).toBe(1);
 
       buffer.updateLifetime(1.1);
-      expect(buffer.alphas[0]).toBeCloseTo(0.35, 1);
+      expect(buffer.alphas[0]).toBeCloseTo(0.0, 2);
 
-      // High slip on tarmac (slip 3.0 > threshold 0.6) -> intense skidmark emitted with high opacity
+      // High slip on tarmac (slip 3.0 > threshold 0.28) -> intense skidmark emitted with high opacity
       buffer.addContactPoint(new Vector3(0, 0, 2.0), normal, 'tarmac', 10, 3.0, true, 1.2);
       expect(buffer.getSegmentCount()).toBe(2);
 
       buffer.updateLifetime(1.2);
       expect(buffer.alphas[2]).toBeGreaterThan(0.7);
+      // Verify authentic rubber charcoal color (R, G, B are low)
+      expect(buffer.colors[6]).toBeLessThan(0.2);
+    });
+
+    it('emits realistic cool snow ruts on snow without black rubber', () => {
+      const buffer = new TireRibbonBuffer({ minDistance: 0.1 });
+      const normal = new Vector3(0, 1, 0);
+
+      buffer.addContactPoint(new Vector3(0, 0, 0), normal, 'snow', 10, 0.0, true, 1.0);
+      const addedSnow = buffer.addContactPoint(new Vector3(0, 0, 1.0), normal, 'snow', 10, 0.0, true, 1.1);
+      expect(addedSnow).toBe(true);
+      expect(buffer.getSegmentCount()).toBe(1);
+
+      buffer.updateLifetime(1.1);
+      expect(buffer.alphas[0]).toBeCloseTo(0.20, 2);
+      // Verify color is cool light snow blue-grey in linear RGB, NEVER black rubber!
+      expect(buffer.colors[0]).toBeGreaterThan(0.25); // Linear Red > 0.25 (vs 0.007 on asphalt)
+      expect(buffer.colors[1]).toBeGreaterThan(0.35); // Linear Green > 0.35
+      expect(buffer.colors[2]).toBeGreaterThan(0.45); // Linear Blue > 0.45 (cool snow tone)
     });
 
     it('fades out segments over their lifetime and prunes expired points', () => {
@@ -304,8 +323,10 @@ describe('Tire Ribbon System', () => {
       for (const s of surfaces) {
         const prof = SURFACE_TRACK_PROFILES[s];
         expect(prof).toBeDefined();
-        expect(prof.baseOpacity).toBeGreaterThan(0);
+        expect(prof.baseOpacity).toBeGreaterThanOrEqual(0);
+        expect(prof.maxSlipOpacity).toBeGreaterThan(prof.baseOpacity);
         expect(prof.colorHex.startsWith('#')).toBe(true);
+        expect(prof.slideColorHex.startsWith('#')).toBe(true);
       }
     });
   });
