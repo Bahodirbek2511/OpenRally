@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { useGameStore } from '@/store/gameStore';
-import { isIOS } from '@/utils/device';
+import { isIOS, isMobileDevice } from '@/utils/device';
 
 /**
  * Enterprise Shader Pre-Warming Component for OpenRally.
@@ -24,8 +24,9 @@ export function ShaderWarmUp(): null {
 
   useEffect(() => {
     // Only pre-compile when scene is still initializing in the loading phase
-    // On iOS WebKit, synchronous full-scene gl.compile triggers Metal watchdog crash
-    if (isSceneReady || isIOS()) return;
+    // Full-scene synchronous shader compilation can freeze low-memory Android GPUs and
+    // trigger long loading stalls. Let mobile devices compile materials on demand.
+    if (isSceneReady || isIOS() || isMobileDevice()) return;
 
     const timer = setTimeout(() => {
       try {
