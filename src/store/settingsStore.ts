@@ -156,16 +156,20 @@ export function loadSettingsFromStorage(isAndroidDevice: boolean = isMobileOrAnd
     if (isAndroidDevice) {
       if (validated.graphicsConfiguredByUser !== true) {
         if (validated.graphicsQuality === 'very_high' || !validated.graphicsQuality) {
-          validated.graphicsQuality = 'medium';
+          validated.graphicsQuality = 'low';
+          validated.targetFps = 30;
+          validated.drawDistance = 'short';
           validated.antiAliasing = 'off';
-          validated.resolutionScale = 1.0;
+          validated.resolutionScale = 0.7;
           validated.shadowsEnabled = false;
           validated.postProcessingEnabled = false;
           validated.graphicsConfiguredByUser = false;
           saveSettingsToStorage({
-            graphicsQuality: 'medium',
+            graphicsQuality: 'low',
+            targetFps: 30,
+            drawDistance: 'short',
             antiAliasing: 'off',
-            resolutionScale: 1.0,
+            resolutionScale: 0.7,
             shadowsEnabled: false,
             postProcessingEnabled: false,
             graphicsConfiguredByUser: false,
@@ -255,6 +259,9 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         graphicsConfiguredByUser: true,
       };
       if (graphicsQuality === 'low') {
+        updates.targetFps = isMobile ? 30 : 60;
+        updates.resolutionScale = isMobile ? 0.7 : 1.0;
+        updates.dynamicResolution = false;
         updates.postProcessingEnabled = false;
         updates.antiAliasing = 'off';
         updates.shadowsEnabled = false;
