@@ -60,11 +60,11 @@ export interface GameSettings extends TouchSettings {
 }
 
 export const BALANCED_MOBILE_SETTINGS: Partial<GameSettings> = {
-  graphicsQuality: 'medium',
-  targetFps: 60,
-  drawDistance: 'medium',
+  graphicsQuality: 'low',
+  targetFps: 30,
+  drawDistance: 'short',
   antiAliasing: 'off',
-  resolutionScale: 1.0,
+  resolutionScale: 0.7,
   dynamicResolution: false,
   shadowsEnabled: false,
   postProcessingEnabled: false,
